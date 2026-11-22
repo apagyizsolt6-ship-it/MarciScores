@@ -401,25 +401,25 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 grouped.forEach { (leagueKey, matches) ->
                     item(key = "header-$leagueKey") {
                         val first = matches.firstOrNull()
+                        val leagueColor = leagueAccentColor(leagueKey)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 12.dp, bottom = 4.dp),
+                                .background(leagueColor.copy(alpha = 0.18f))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (!first?.leagueLogo.isNullOrBlank()) {
                                 Image(
                                     painter = rememberAsyncImagePainter(first!!.leagueLogo),
                                     contentDescription = null,
-                                    modifier = Modifier
-                                        .size(26.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
+                                    modifier = Modifier.size(22.dp).clip(RoundedCornerShape(3.dp)),
                                     contentScale = ContentScale.Fit
                                 )
                                 Spacer(Modifier.width(8.dp))
@@ -427,21 +427,29 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                                 Image(
                                     painter = rememberAsyncImagePainter(first!!.countryFlag),
                                     contentDescription = null,
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .clip(RoundedCornerShape(2.dp)),
+                                    modifier = Modifier.size(20.dp).clip(RoundedCornerShape(2.dp)),
                                     contentScale = ContentScale.Fit
                                 )
                                 Spacer(Modifier.width(8.dp))
                             }
-                            Text(
-                                text = leagueKey,
-                                color = LiveGreen,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = first?.league?.ifBlank { "Bajnokság" } ?: "Bajnokság",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (!first?.country.isNullOrBlank()) {
+                                    Text(
+                                        text = first!!.country.uppercase(),
+                                        color = LiveMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                            Text("${matches.size}", color = leagueColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     items(
@@ -465,157 +473,125 @@ private fun LiveMatchCard(
     var isHomeFav by remember(match.homeTeam) { mutableStateOf(FavoritesStorage.isFavorite(context, match.homeTeam)) }
     var isAwayFav by remember(match.awayTeam) { mutableStateOf(FavoritesStorage.isFavorite(context, match.awayTeam)) }
 
-    val badgeColor = if (isLive) LiveGreen else LiveAmber
-    val hasFavorite = isHomeFav || isAwayFav
+    val isLiveMatch = match.status == "ÉLŐ" || isLive
+    val statusColor = when {
+        isLiveMatch -> LiveGreen
+        match.status.contains("Vége", ignoreCase = true) -> LiveMuted
+        else -> LiveAmber
+    }
+    val statusText = when {
+        isLiveMatch && match.startTime.isNotBlank() -> match.startTime
+        match.status.isNotBlank() -> match.status
+        match.startTime.isNotBlank() -> match.startTime
+        else -> "–"
+    }
+
     val homeColor = teamColor(match.homeTeam)
     val awayColor = teamColor(match.awayTeam)
+    val hasFavorite = isHomeFav || isAwayFav
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (hasFavorite) Color(0xFF1A2E1A) else LivePanel
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(0.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Csapat színű szegélyek
-            Box(Modifier.width(4.dp).fillMaxHeight().background(homeColor))
-            Column(
-                Modifier
-                    .weight(1f)
-                    .padding(14.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Státusz / perc balra (Flashscore stílus)
+            Box(
+                modifier = Modifier
+                    .width(52.dp)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center
             ) {
-                val headerMeta = buildList {
-                    if (match.country.isNotBlank()) add(match.country)
-                    if (match.league.isNotBlank()) add(match.league)
-                    if (match.venue.isNotBlank()) add(match.venue)
-                }.joinToString(" · ")
+                Text(
+                    text = statusText,
+                    color = statusColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
 
+            // Csapatok középen
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 6.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = headerMeta,
-                        color = LiveMuted,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (hasFavorite) {
-                        Text("⭐", fontSize = 14.sp)
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-
-                // Home team row with star
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(8.dp)
-                            .background(homeColor, RoundedCornerShape(2.dp))
-                    )
+                    Box(Modifier.size(6.dp).background(homeColor, RoundedCornerShape(1.dp)))
                     Spacer(Modifier.width(6.dp))
-                    if (match.homeLogo.isNotBlank()) {
-                        Image(
-                            painter = rememberAsyncImagePainter(match.homeLogo),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                            contentScale = ContentScale.Fit
-                        )
-                        Spacer(Modifier.width(6.dp))
-                    }
                     Text(
                         text = match.homeTeam,
                         color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
+                        fontWeight = if (isHomeFav) FontWeight.Bold else FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(
-                        onClick = {
-                            FavoritesStorage.toggle(context, match.homeTeam)
-                            isHomeFav = !isHomeFav
-                        },
-                        contentPadding = PaddingValues(4.dp)
-                    ) {
-                        Text(if (isHomeFav) "★" else "☆", color = if (isHomeFav) Color(0xFFFFD700) else LiveMuted, fontSize = 16.sp)
-                    }
-                    Text(
-                        text = match.homeScore,
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black
-                    )
+                    if (isHomeFav) Text("★", color = Color(0xFFFFD700), fontSize = 12.sp)
                 }
-                Spacer(Modifier.height(4.dp))
-
-                // Away team row with star
+                Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(8.dp)
-                            .background(awayColor, RoundedCornerShape(2.dp))
-                    )
+                    Box(Modifier.size(6.dp).background(awayColor, RoundedCornerShape(1.dp)))
                     Spacer(Modifier.width(6.dp))
-                    if (match.awayLogo.isNotBlank()) {
-                        Image(
-                            painter = rememberAsyncImagePainter(match.awayLogo),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                            contentScale = ContentScale.Fit
-                        )
-                        Spacer(Modifier.width(6.dp))
-                    }
                     Text(
                         text = match.awayTeam,
                         color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
+                        fontWeight = if (isAwayFav) FontWeight.Bold else FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(
-                        onClick = {
-                            FavoritesStorage.toggle(context, match.awayTeam)
-                            isAwayFav = !isAwayFav
-                        },
-                        contentPadding = PaddingValues(4.dp)
-                    ) {
-                        Text(if (isAwayFav) "★" else "☆", color = if (isAwayFav) Color(0xFFFFD700) else LiveMuted, fontSize = 16.sp)
-                    }
-                    Text(
-                        text = match.awayScore,
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    val badgeText = when {
-                        match.status == "ÉLŐ" && match.startTime.isNotBlank() -> match.startTime
-                        match.status.isNotBlank() -> match.status
-                        match.startTime.isNotBlank() -> match.startTime
-                        else -> "PROGRAM"
-                    }
-                    Text(
-                        text = badgeText,
-                        color = badgeColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (isAwayFav) Text("★", color = Color(0xFFFFD700), fontSize = 12.sp)
                 }
             }
-            Box(Modifier.width(4.dp).fillMaxHeight().background(awayColor))
+
+            // Eredmény jobbra
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.width(48.dp)
+            ) {
+                Text(
+                    text = match.homeScore.ifBlank { "-" },
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = match.awayScore.ifBlank { "-" },
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Kedvenc csillag
+            TextButton(
+                onClick = {
+                    val team = if (isHomeFav || !isAwayFav) match.homeTeam else match.awayTeam
+                    FavoritesStorage.toggle(context, team)
+                    if (team == match.homeTeam) isHomeFav = !isHomeFav else isAwayFav = !isAwayFav
+                },
+                contentPadding = PaddingValues(4.dp),
+                modifier = Modifier.width(36.dp)
+            ) {
+                Text(
+                    if (hasFavorite) "★" else "☆",
+                    color = if (hasFavorite) Color(0xFFFFD700) else LiveMuted,
+                    fontSize = 18.sp
+                )
+            }
         }
     }
 }
@@ -623,5 +599,20 @@ private fun LiveMatchCard(
 private fun teamColor(name: String): Color {
     val hash = name.hashCode()
     val hue = (hash and 0xFFFFFF) % 360
-    return Color.hsv(hue.toFloat(), 0.65f, 0.85f)
+    return Color.hsv(hue.toFloat(), 0.7f, 0.9f)
+}
+
+private fun leagueAccentColor(key: String): Color {
+    val k = key.lowercase()
+    return when {
+        k.contains("premier") -> Color(0xFF3D195B)
+        k.contains("la liga") || k.contains("laliga") -> Color(0xFFFF4B44)
+        k.contains("serie a") -> Color(0xFF024494)
+        k.contains("bundesliga") -> Color(0xFFD20515)
+        k.contains("ligue") -> Color(0xFF091C3E)
+        k.contains("champions") -> Color(0xFF0E1E5B)
+        k.contains("europa") -> Color(0xFFFFA500)
+        k.contains("nb i") || k.contains("otp") -> Color(0xFFC8102E)
+        else -> Color(0xFF20E875)
+    }
 }
