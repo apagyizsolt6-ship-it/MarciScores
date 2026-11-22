@@ -1,9 +1,12 @@
 package com.marciscores.app
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +27,7 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scrollState = rememberScrollState()
 
     var apiKey by remember {
         mutableStateOf("")
@@ -45,6 +49,8 @@ fun SettingsScreen(
         mutableStateOf(true)
     }
 
+    BackHandler(onBack = onBack)
+
     LaunchedEffect(Unit) {
         try {
             apiKey = withContext(Dispatchers.IO) {
@@ -62,19 +68,26 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF070B18))
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(scrollState)
             .padding(20.dp)
     ) {
 
         Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
 
             TextButton(
-                onClick = onBack
+                onClick = onBack,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Text(
                     "‹ Vissza",
-                    color = Color(0xFF20E875)
+                    color = Color(0xFF20E875),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
 
@@ -84,12 +97,13 @@ fun SettingsScreen(
 
             Text(
                 "⚙",
+                color = Color(0xFF9EABC7),
                 fontSize = 25.sp
             )
         }
 
         Spacer(
-            Modifier.height(20.dp)
+            Modifier.height(16.dp)
         )
 
         Text(
@@ -111,10 +125,11 @@ fun SettingsScreen(
         )
 
         Spacer(
-            Modifier.height(25.dp)
+            Modifier.height(22.dp)
         )
 
         Card(
+            modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = Color(0xFF111A2E)
             ),
@@ -183,6 +198,7 @@ fun SettingsScreen(
                         focusedBorderColor = Color(0xFF20E875),
                         unfocusedBorderColor = Color(0xFF34415C),
                         focusedLabelColor = Color(0xFF20E875),
+                        unfocusedLabelColor = Color(0xFF9EABC7),
                         cursorColor = Color(0xFF20E875),
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White
@@ -196,6 +212,7 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         if (apiKey.isBlank()) {
+                            isSaved = false
                             message = "Először írd be az API-kulcsot."
                         } else {
                             try {
@@ -207,6 +224,7 @@ fun SettingsScreen(
                                 isSaved = true
                                 message = "API-kulcs helyben elmentve."
                             } catch (e: Exception) {
+                                isSaved = false
                                 message = "A mentés nem sikerült."
                             }
                         }
@@ -243,6 +261,7 @@ fun SettingsScreen(
                             isSaved = false
                             message = "A mentett API-kulcs törölve."
                         } catch (e: Exception) {
+                            isSaved = false
                             message = "A törlés nem sikerült."
                         }
                     },
@@ -282,6 +301,7 @@ fun SettingsScreen(
         )
 
         Card(
+            modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = Color(0xFF102A24)
             ),
