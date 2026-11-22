@@ -350,7 +350,7 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 onClick = { scope.launch { refreshMatches(selectedOffset) } },
                 enabled = !loading
             ) {
-                Text(if (loading) "Frissítés…" else "↻", color = LiveGreen)
+                Text(if (loading) "…" else "↻", color = LiveGreen)
             }
         }
 
@@ -454,17 +454,19 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                                 Spacer(Modifier.width(8.dp))
                             }
                             Column(modifier = Modifier.weight(1f)) {
+                                val translatedLeague = translateLeague(first?.league?.ifBlank { "Bajnokság" } ?: "Bajnokság")
+                                val translatedCountry = translateCountry(first?.country ?: "")
                                 Text(
-                                    text = first?.league?.ifBlank { "Bajnokság" } ?: "Bajnokság",
+                                    text = translatedLeague,
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                if (!first?.country.isNullOrBlank()) {
+                                if (translatedCountry.isNotBlank() && translatedCountry != "Egyéb") {
                                     Text(
-                                        text = first!!.country.uppercase(),
+                                        text = translatedCountry.uppercase(),
                                         color = LiveMuted,
                                         fontSize = 10.sp
                                     )
@@ -572,20 +574,17 @@ private fun LiveMatchCard(
                 // Státusz / perc
                 Box(
                     modifier = Modifier
-                        .width(50.dp)
+                        .width(58.dp)
                         .fillMaxHeight(),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isLiveMatch) {
-                        Text("●", color = LiveGreen, fontSize = 10.sp)
-                        Spacer(Modifier.height(2.dp))
-                    }
                     Text(
                         text = statusText,
                         color = statusColor,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
