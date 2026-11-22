@@ -1,4 +1,3 @@
-
 package com.marciscores.app
 
 import androidx.compose.foundation.background
@@ -188,7 +187,7 @@ fun SettingsScreen(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White
                     )
-                }
+                )
 
                 Spacer(
                     Modifier.height(15.dp)
