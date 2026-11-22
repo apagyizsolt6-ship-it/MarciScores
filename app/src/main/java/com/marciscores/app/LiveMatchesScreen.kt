@@ -121,9 +121,10 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
         else -> dailyMatches
     }
 
-    val filteredMatches = remember(baseList, searchQuery, onlyFavorites, onlyTopLeagues) {
+    val favs = remember(onlyFavorites) { FavoritesStorage.getFavorites(context) }
+
+    val filteredMatches = remember(baseList, searchQuery, onlyFavorites, onlyTopLeagues, favs) {
         val q = searchQuery.trim().lowercase()
-        val favs = FavoritesStorage.getFavorites(LocalContext.current)
         val topKeywords = listOf("premier", "la liga", "serie a", "bundesliga", "ligue 1", "champions", "europa", "conference", "mls", "eredivisie")
 
         baseList.filter { m ->
