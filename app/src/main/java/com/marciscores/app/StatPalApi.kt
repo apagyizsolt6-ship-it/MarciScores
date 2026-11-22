@@ -23,6 +23,13 @@ data class LiveMatch(
     val venue: String = ""
 )
 
+/** Diagnostic result when fetching matches so empty lists can be debugged easily. */
+data class MatchesFetchResult(
+    val matches: List<LiveMatch>,
+    val rawArrayCount: Int,
+    val diagnosticInfo: String
+)
+
 /** A normalized league standing row from Soccer V2 standings. */
 data class LeagueStandingRow(
     val position: String,
@@ -72,7 +79,11 @@ class StatPalApi {
     }
 
     suspend fun getLiveMatches(apiKey: String): List<LiveMatch> {
-        return fetchMatches(
+        return getLiveMatchesWithDiagnostics(apiKey).matches
+    }
+
+    suspend fun getLiveMatchesWithDiagnostics(apiKey: String): MatchesFetchResult {
+        return fetchMatchesDetailed(
             apiKey = apiKey,
             path = "matches/live",
             queryParams = emptyMap(),
@@ -80,16 +91,29 @@ class StatPalApi {
         )
     }
 
+    /**
+     * Fetches matches from `matches/daily` using StatPal's `offset` query parameter (-7..7).
+     * Note: offset=0 is omitted if not listed in allowed values, or tested alongside -1..7.
+     */
     suspend fun getDailyMatches(
         apiKey: String,
-        date: String? = null,
+        offset: Int = -1,
         leagueId: String? = null
     ): List<LiveMatch> {
+        return getDailyMatchesWithDiagnostics(apiKey = apiKey, offset = offset, leagueId = leagueId).matches
+    }
+
+    suspend fun getDailyMatchesWithDiagnostics(
+        apiKey: String,
+        offset: Int = -1,
+        leagueId: String? = null
+    ): MatchesFetchResult {
+        val clampedOffset = offset.coerceIn(-7, 7)
         val params = buildMap {
-            date?.trim()?.takeIf { it.isNotBlank() }?.let { put("date", it) }
+            put("offset", clampedOffset.toString())
             leagueId?.trim()?.takeIf { it.isNotBlank() }?.let { put("league_id", it) }
         }
-        return fetchMatches(
+        return fetchMatchesDetailed(
             apiKey = apiKey,
             path = "matches/daily",
             queryParams = params,
@@ -308,27 +332,58 @@ class StatPalApi {
         }
     }
 
-    private suspend fun fetchMatches(
+    private suspend fun fetchMatchesDetailed(
         apiKey: String,
         path: String,
         queryParams: Map<String, String>,
         sortResults: Boolean
-    ): List<LiveMatch> = withContext(Dispatchers.IO) {
+    ): MatchesFetchResult = withContext(Dispatchers.IO) {
         val responseText = requestGet(apiKey = apiKey, path = path, queryParams = queryParams)
-        if (responseText.isBlank()) return@withContext emptyList()
+        val queryLabel = queryParams.entries.joinToString("&") { "${it.key}=${it.value}" }
+            .let { if (it.isBlank()) path else "$path?$it" }
+
+        if (responseText.isBlank()) {
+            return@withContext MatchesFetchResult(
+                matches = emptyList(),
+                rawArrayCount = 0,
+                diagnosticInfo = "$queryLabel -> üres válasz"
+            )
+        }
 
         if (responseText.startsWith("[")) {
-            val matches = parseMatchesArray(JSONArray(responseText))
-            return@withContext if (sortResults) matches.sortedWith(matchComparator()) else matches
+            val arr = JSONArray(responseText)
+            val matches = parseMatchesArray(arr)
+            val sorted = if (sortResults) matches.sortedWith(matchComparator()) else matches
+            return@withContext MatchesFetchResult(
+                matches = sorted,
+                rawArrayCount = arr.length(),
+                diagnosticInfo = "$queryLabel -> tömb (${arr.length()} elem, meccs: ${sorted.size})"
+            )
         }
 
         val root = parseJsonObject(responseText)
         ensureSuccess(root)
 
+        // StatPal matches/daily structure: { "matches_DD_MM_YYYY": { "updated": "...", "league": [ { "name": "...", "country": "...", "match": [...] or {...} } ] } }
+        val datedMatches = extractStatPalLeagueMatches(root)
+        if (datedMatches != null) {
+            val sorted = if (sortResults) datedMatches.sortedWith(matchComparator()) else datedMatches
+            return@withContext MatchesFetchResult(
+                matches = sorted,
+                rawArrayCount = sorted.size,
+                diagnosticInfo = "$queryLabel -> StatPal liga-bontás (${sorted.size} meccs)"
+            )
+        }
+
         val matchesArray = findMatchesArray(root)
         if (matchesArray != null) {
             val matches = parseMatchesArray(matchesArray)
-            return@withContext if (sortResults) matches.sortedWith(matchComparator()) else matches
+            val sorted = if (sortResults) matches.sortedWith(matchComparator()) else matches
+            return@withContext MatchesFetchResult(
+                matches = sorted,
+                rawArrayCount = matchesArray.length(),
+                diagnosticInfo = "$queryLabel -> lista (${matchesArray.length()} elem, meccs: ${sorted.size})"
+            )
         }
 
         val candidateObject = root.optJSONObject("data")
@@ -339,11 +394,89 @@ class StatPalApi {
         if (candidateObject != null) {
             val singleMatch = candidateObject.toLiveMatch(0)
             if (singleMatch.homeTeam.isNotBlank() && singleMatch.awayTeam.isNotBlank()) {
-                return@withContext listOf(singleMatch)
+                return@withContext MatchesFetchResult(
+                    matches = listOf(singleMatch),
+                    rawArrayCount = 1,
+                    diagnosticInfo = "$queryLabel -> 1 objektum"
+                )
             }
         }
 
         throw buildUnexpectedStructureException(root)
+    }
+
+    /**
+     * Parses StatPal's `matches_DD_MM_YYYY -> league[] -> match ([] or {})` hierarchy.
+     * Returns null if this structure is not present in `root`.
+     */
+    private fun extractStatPalLeagueMatches(root: JSONObject): List<LiveMatch>? {
+        val dateContainer = findDateContainer(root) ?: return null
+        val leaguesArray = dateContainer.optJSONArray("league") ?: return emptyList()
+
+        val result = mutableListOf<LiveMatch>()
+        var matchCounter = 0
+
+        for (lIdx in 0 until leaguesArray.length()) {
+            val leagueObj = leaguesArray.optJSONObject(lIdx) ?: continue
+            val leagueName = leagueObj.firstText("name", "league_name", "title").ifBlank { "Bajnokság" }
+            val rawCountry = leagueObj.firstText("country", "country_name")
+            val formattedCountry = rawCountry
+                .replace("_", " ")
+                .trim()
+                .split(" ")
+                .filter { it.isNotBlank() }
+                .joinToString(" ") { part ->
+                    part.replaceFirstChar { ch -> if (ch.isLowerCase()) ch.titlecase() else ch.toString() }
+                }
+
+            val matchField = leagueObj.opt("match") ?: continue
+            when (matchField) {
+                is JSONArray -> {
+                    for (mIdx in 0 until matchField.length()) {
+                        val mObj = matchField.optJSONObject(mIdx) ?: continue
+                        val parsed = mObj.toLiveMatch(
+                            index = matchCounter++,
+                            defaultCountry = formattedCountry,
+                            defaultLeague = leagueName
+                        )
+                        if (parsed.homeTeam.isNotBlank() && parsed.awayTeam.isNotBlank()) {
+                            result.add(parsed)
+                        }
+                    }
+                }
+                is JSONObject -> {
+                    val parsed = matchField.toLiveMatch(
+                        index = matchCounter++,
+                        defaultCountry = formattedCountry,
+                        defaultLeague = leagueName
+                    )
+                    if (parsed.homeTeam.isNotBlank() && parsed.awayTeam.isNotBlank()) {
+                        result.add(parsed)
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    private fun findDateContainer(root: JSONObject): JSONObject? {
+        if (root.has("league") && root.opt("league") is JSONArray) return root
+        root.optJSONObject("data")?.let { dataObj ->
+            if (dataObj.has("league") && dataObj.opt("league") is JSONArray) return dataObj
+            findMatchesKeyObject(dataObj)?.let { return it }
+        }
+        return findMatchesKeyObject(root)
+    }
+
+    private fun findMatchesKeyObject(obj: JSONObject): JSONObject? {
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            if (key.startsWith("matches_", ignoreCase = true)) {
+                obj.optJSONObject(key)?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun requestGet(
@@ -385,7 +518,7 @@ class StatPalApi {
                         apiErrMsg ?: "A StatPal kérési limitje elérte a határt. Próbáld később."
                     )
                     else -> throw IllegalStateException(
-                        apiErrMsg ?: "StatPal API-hiba (HTTP $code). Próbáld újra később."
+                        apiErrMsg ?: "StatPal API-hiba ($cleanPath, HTTP $code). ${responseText.take(120)}"
                     )
                 }
             }
@@ -531,7 +664,11 @@ class StatPalApi {
         return null
     }
 
-    private fun JSONObject.toLiveMatch(index: Int): LiveMatch {
+    private fun JSONObject.toLiveMatch(
+        index: Int,
+        defaultCountry: String = "",
+        defaultLeague: String = ""
+    ): LiveMatch {
         val homeObject = firstObject("home_team", "homeTeam", "home", "team_home", "local_team", "localTeam")
         val awayObject = firstObject("away_team", "awayTeam", "away", "team_away", "visitor_team", "visitorTeam")
 
@@ -542,13 +679,18 @@ class StatPalApi {
             .ifBlank { awayObject?.firstText("name", "team_name", "title", "short_name").orEmpty() }
             .ifBlank { firstText("away") }
 
+        val ftObject = firstObject("ft")
         val scoreObject = firstObject("score", "scores", "current_score", "result", "ft_score")
+
         val homeScore = firstText("home_score", "homeScore", "home_goals", "homeGoals", "goals_home")
+            .ifBlank { homeObject?.firstText("goals", "score").orEmpty() }
+            .ifBlank { ftObject?.firstText("home_goals", "home").orEmpty() }
             .ifBlank { scoreObject?.firstText("home", "home_score", "homeScore", "local").orEmpty() }
-            .ifBlank { homeObject?.firstText("score", "goals").orEmpty() }
+
         val awayScore = firstText("away_score", "awayScore", "away_goals", "awayGoals", "goals_away")
+            .ifBlank { awayObject?.firstText("goals", "score").orEmpty() }
+            .ifBlank { ftObject?.firstText("away_goals", "away").orEmpty() }
             .ifBlank { scoreObject?.firstText("away", "away_score", "awayScore", "visitor").orEmpty() }
-            .ifBlank { awayObject?.firstText("score", "goals").orEmpty() }
 
         val leagueObject = firstObject("league", "competition", "tournament", "cup")
         val countryObject = firstObject("country", "area", "region")
@@ -556,14 +698,16 @@ class StatPalApi {
 
         val league = firstText("league_name", "leagueName", "competition_name", "tournament_name")
             .ifBlank { leagueObject?.firstText("name", "title").orEmpty() }
+            .ifBlank { defaultLeague }
             .ifBlank { "Bajnokság" }
         val country = firstText("country_name", "countryName")
             .ifBlank { countryObject?.firstText("name", "title").orEmpty() }
+            .ifBlank { defaultCountry }
 
         val rawStatus = firstText("status", "match_status", "state", "minute", "elapsed", "time")
         val status = normalizeStatus(rawStatus, this)
-        val id = firstText("match_id", "matchId", "id", "fixture_id", "game_id").ifBlank { "live-$index" }
-        val startTime = firstText("start_time", "startTime", "kickoff", "date", "time")
+        val id = firstText("main_id", "match_id", "matchId", "id", "fixture_id", "game_id").ifBlank { "live-$index" }
+        val startTime = firstText("start_time", "startTime", "kickoff", "time", "date")
         val venue = firstText("venue_name", "venueName", "stadium")
             .ifBlank { venueObject?.firstText("name", "title").orEmpty() }
 
@@ -587,7 +731,8 @@ class StatPalApi {
         val upper = value.uppercase()
         if (upper == "HT" || upper.contains("HALF TIME") || upper.contains("HALFTIME")) return "SZÜNET"
         if (upper == "FT" || upper.contains("FINISHED") || upper.contains("FULL TIME")) return "VÉGE"
-        if (upper.contains("PEN") || upper.contains("PENALTY")) return "TIZ"
+        if (upper == "PEN." || upper == "PEN" || upper.contains("PENALTY")) return "TIZ"
+        if (upper.startsWith("POSTP")) return "ELHALASZTVA"
         val minute = value.toIntOrNull()
         if (minute != null) return "$minute'"
         val explicitMinute = item.optInt("minute", -1).takeIf { it >= 0 }
@@ -608,7 +753,7 @@ class StatPalApi {
         for (key in keys) {
             val value = opt(key) ?: continue
             when (value) {
-                is JSONObject -> value.firstText("name", "team_name", "title", "score")
+                is JSONObject -> value.firstText("name", "team_name", "title", "goals", "score")
                     .takeIf { it.isNotBlank() }?.let { return it }
                 is JSONArray -> Unit
                 JSONObject.NULL -> Unit
