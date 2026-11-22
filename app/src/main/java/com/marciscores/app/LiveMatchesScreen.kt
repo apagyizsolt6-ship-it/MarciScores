@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ private val LiveBg = Color(0xFF070B18)
 private val LivePanel = Color(0xFF111A2E)
 private val LiveGreen = Color(0xFF20E875)
 private val LiveMuted = Color(0xFF9EABC7)
+private val LiveAmber = Color(0xFFFFB84D)
 
 @Composable
 fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
@@ -34,6 +36,7 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
     var liveMatches by remember { mutableStateOf<List<LiveMatch>>(emptyList()) }
     var dailyFallbackMatches by remember { mutableStateOf<List<LiveMatch>>(emptyList()) }
     var showingDailyFallback by remember { mutableStateOf(false) }
+    var debugSummary by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var lastUpdated by remember { mutableStateOf("") }
@@ -44,22 +47,33 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
         error = null
         try {
             val key = ApiKeyStorage.load(context)
-            val liveResult = api.getLiveMatches(key)
-            liveMatches = liveResult
+            val liveResult = api.getLiveMatchesWithDiagnostics(key)
+            liveMatches = liveResult.matches
 
-            if (liveResult.isEmpty()) {
-                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                dailyFallbackMatches = try {
-                    api.getDailyMatches(key, date = today)
-                } catch (_: Exception) {
-                    emptyList()
+            val notes = mutableListOf(liveResult.diagnosticInfo)
+
+            if (liveResult.matches.isEmpty()) {
+                val dailyResult = try {
+                    api.getDailyMatchesWithDiagnostics(key, offset = -1)
+                } catch (e: Exception) {
+                    notes.add("daily(offset=-1) hiba: ${e.message}")
+                    null
                 }
-                showingDailyFallback = dailyFallbackMatches.isNotEmpty()
+
+                if (dailyResult != null) {
+                    notes.add(dailyResult.diagnosticInfo)
+                    dailyFallbackMatches = dailyResult.matches
+                    showingDailyFallback = dailyResult.matches.isNotEmpty()
+                } else {
+                    dailyFallbackMatches = emptyList()
+                    showingDailyFallback = false
+                }
             } else {
                 dailyFallbackMatches = emptyList()
                 showingDailyFallback = false
             }
 
+            debugSummary = notes.joinToString("\n")
             val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
             lastUpdated = timeFormat.format(Date())
         } catch (exception: Exception) {
@@ -94,20 +108,20 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "ÉLŐ MÉRKŐZÉSEK",
+                    text = "ÉLŐ MÉRKŐZÉSEK",
                     color = LiveGreen,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "Eredmények valós időben",
+                    text = "Eredmények valós időben",
                     color = Color.White,
                     fontSize = 23.sp,
                     fontWeight = FontWeight.Black
                 )
                 if (lastUpdated.isNotBlank()) {
                     Text(
-                        "Frissítve: $lastUpdated · automatikus frissítés 30 mp-enként",
+                        text = "Frissítve: $lastUpdated · automatikus frissítés 30 mp-enként",
                         color = LiveMuted,
                         fontSize = 10.sp
                     )
@@ -124,18 +138,24 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 .padding(bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("●", color = if (liveMatches.isNotEmpty()) LiveGreen else LiveMuted, fontSize = 12.sp)
-            Spacer(Modifier.width(7.dp))
             Text(
-                if (showingDailyFallback) {
-                    "0 élő mérkőzés · Mai napi meccsek (${displayedMatches.size})"
-                } else {
-                    "${liveMatches.size} élő mérkőzés"
-                },
-                color = LiveMuted,
+                text = "●",
+                color = if (liveMatches.isNotEmpty()) LiveGreen else LiveMuted,
                 fontSize = 12.sp
             )
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(7.dp))
+            Text(
+                text = when {
+                    liveMatches.isNotEmpty() -> "${liveMatches.size} élő mérkőzés"
+                    showingDailyFallback -> "0 élő mérkőzés · Napi meccsek (offset=-1): ${displayedMatches.size}"
+                    else -> "0 élő mérkőzés"
+                },
+                color = LiveMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
             TextButton(
                 onClick = { scope.launch { refreshMatches() } },
                 enabled = !loading
@@ -192,6 +212,14 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                         color = LiveMuted,
                         fontSize = 12.sp
                     )
+                    if (debugSummary.isNotBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = debugSummary,
+                            color = LiveMuted,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             }
         } else {
@@ -200,8 +228,11 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 contentPadding = PaddingValues(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(displayedMatches, key = { "${it.id}_${it.homeTeam}_${it.awayTeam}" }) { match ->
-                    LiveMatchCard(match)
+                items(
+                    items = displayedMatches,
+                    key = { "${it.id}_${it.homeTeam}_${it.awayTeam}_${it.startTime}" }
+                ) { match ->
+                    LiveMatchCard(match = match, isLive = liveMatches.isNotEmpty())
                 }
             }
         }
@@ -209,7 +240,12 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
 }
 
 @Composable
-private fun LiveMatchCard(match: LiveMatch) {
+private fun LiveMatchCard(
+    match: LiveMatch,
+    isLive: Boolean
+) {
+    val badgeColor = if (isLive) LiveGreen else LiveAmber
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = LivePanel),
@@ -220,31 +256,57 @@ private fun LiveMatchCard(match: LiveMatch) {
                 .fillMaxWidth()
                 .padding(14.dp)
         ) {
+            val headerMeta = buildList {
+                if (match.country.isNotBlank()) add(match.country)
+                if (match.league.isNotBlank()) add(match.league)
+                if (match.venue.isNotBlank()) add(match.venue)
+            }.joinToString(" · ")
+
             Text(
-                listOf(match.country, match.league)
-                    .filter { it.isNotBlank() }
-                    .joinToString(" · "),
+                text = headerMeta,
                 color = LiveMuted,
                 fontSize = 11.sp,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(match.homeTeam, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        text = match.homeTeam,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Spacer(Modifier.height(7.dp))
-                    Text(match.awayTeam, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        text = match.awayTeam,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
+                Spacer(Modifier.width(12.dp))
                 Column(horizontalAlignment = Alignment.End) {
-                    val badgeText = if (match.status == "ÉLŐ" && match.startTime.isNotBlank()) {
-                        match.startTime
-                    } else {
-                        match.status
+                    val badgeText = when {
+                        match.status == "ÉLŐ" && match.startTime.isNotBlank() -> match.startTime
+                        match.status.isNotBlank() -> match.status
+                        match.startTime.isNotBlank() -> match.startTime
+                        else -> "NAPI"
                     }
-                    Text(badgeText, color = LiveGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = badgeText,
+                        color = badgeColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(Modifier.height(5.dp))
                     Text(
-                        "${match.homeScore}  :  ${match.awayScore}",
+                        text = "${match.homeScore}  :  ${match.awayScore}",
                         color = Color.White,
                         fontSize = 21.sp,
                         fontWeight = FontWeight.Black
