@@ -1,22 +1,9 @@
 
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
-
-val localProps = Properties()
-val localPropsFile = rootProject.file("local.properties")
-
-if (localPropsFile.exists()) {
-    localPropsFile.inputStream().use {
-        localProps.load(it)
-    }
-}
-
-val statPalKey = localProps.getProperty("STATPAL_API_KEY", "")
 
 android {
     namespace = "com.marciscores.app"
@@ -28,17 +15,10 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
-        buildConfigField(
-            "String",
-            "STATPAL_API_KEY",
-            "\"${statPalKey.replace("\\", "\\\\").replace("\"", "\\\"")}\""
-        )
     }
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     compileOptions {
@@ -64,6 +44,8 @@ dependencies {
 
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
