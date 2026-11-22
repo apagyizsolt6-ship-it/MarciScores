@@ -400,13 +400,13 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 }
             }
         } else {
+            val expandedLeagues = remember { mutableStateMapOf<String, Boolean>() }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
-                val expandedLeagues = remember { mutableStateMapOf<String, Boolean>() }
-
                 grouped.forEach { (leagueKey, matches) ->
                     val isExpanded = expandedLeagues.getOrDefault(leagueKey, true)
                     item(key = "header-$leagueKey") {
