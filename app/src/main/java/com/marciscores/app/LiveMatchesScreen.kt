@@ -59,6 +59,8 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
     var selectedOffset by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var onlyLive by remember { mutableStateOf(false) }
+    var onlyFavorites by remember { mutableStateOf(false) }
+    var onlyTopLeagues by remember { mutableStateOf(false) }
 
     var liveMatches by remember { mutableStateOf<List<LiveMatch>>(emptyList()) }
     var dailyMatches by remember { mutableStateOf<List<LiveMatch>>(emptyList()) }
@@ -119,17 +121,25 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
         else -> dailyMatches
     }
 
-    val filteredMatches = remember(baseList, searchQuery) {
+    val filteredMatches = remember(baseList, searchQuery, onlyFavorites, onlyTopLeagues) {
         val q = searchQuery.trim().lowercase()
-        if (q.isBlank()) {
-            baseList
-        } else {
-            baseList.filter { m ->
+        val favs = FavoritesStorage.getFavorites(LocalContext.current)
+        val topKeywords = listOf("premier", "la liga", "serie a", "bundesliga", "ligue 1", "champions", "europa", "conference", "mls", "eredivisie")
+
+        baseList.filter { m ->
+            val matchesSearch = q.isBlank() ||
                 m.homeTeam.lowercase().contains(q) ||
-                    m.awayTeam.lowercase().contains(q) ||
-                    m.league.lowercase().contains(q) ||
-                    m.country.lowercase().contains(q)
-            }
+                m.awayTeam.lowercase().contains(q) ||
+                m.league.lowercase().contains(q) ||
+                m.country.lowercase().contains(q)
+
+            val matchesFav = !onlyFavorites ||
+                favs.contains(m.homeTeam) || favs.contains(m.awayTeam)
+
+            val matchesTop = !onlyTopLeagues ||
+                topKeywords.any { kw -> m.league.lowercase().contains(kw) || m.country.lowercase().contains(kw) }
+
+            matchesSearch && matchesFav && matchesTop
         }
     }
 
@@ -202,6 +212,44 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                         labelColor = LiveMuted,
                         selectedContainerColor = LiveGreen,
                         selectedLabelColor = Color(0xFF07130D)
+                    )
+                )
+            }
+            item {
+                FilterChip(
+                    selected = onlyFavorites,
+                    onClick = { onlyFavorites = !onlyFavorites },
+                    label = {
+                        Text(
+                            text = "⭐ Kedvencek",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = LivePanel,
+                        labelColor = LiveMuted,
+                        selectedContainerColor = Color(0xFFFFD700),
+                        selectedLabelColor = Color(0xFF07130D)
+                    )
+                )
+            }
+            item {
+                FilterChip(
+                    selected = onlyTopLeagues,
+                    onClick = { onlyTopLeagues = !onlyTopLeagues },
+                    label = {
+                        Text(
+                            text = "🏆 TOP ligák",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = LivePanel,
+                        labelColor = LiveMuted,
+                        selectedContainerColor = Color(0xFF4DA6FF),
+                        selectedLabelColor = Color.White
                     )
                 )
             }
@@ -418,6 +466,8 @@ private fun LiveMatchCard(
 
     val badgeColor = if (isLive) LiveGreen else LiveAmber
     val hasFavorite = isHomeFav || isAwayFav
+    val homeColor = teamColor(match.homeTeam)
+    val awayColor = teamColor(match.awayTeam)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -426,128 +476,151 @@ private fun LiveMatchCard(
         ),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(14.dp)
-        ) {
-            val headerMeta = buildList {
-                if (match.country.isNotBlank()) add(match.country)
-                if (match.league.isNotBlank()) add(match.league)
-                if (match.venue.isNotBlank()) add(match.venue)
-            }.joinToString(" · ")
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = headerMeta,
-                    color = LiveMuted,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                if (hasFavorite) {
-                    Text("⭐", fontSize = 14.sp)
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-
-            // Home team row with star
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (match.homeLogo.isNotBlank()) {
-                    Image(
-                        painter = rememberAsyncImagePainter(match.homeLogo),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        contentScale = ContentScale.Fit
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
-                Text(
-                    text = match.homeTeam,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(
-                    onClick = {
-                        FavoritesStorage.toggle(context, match.homeTeam)
-                        isHomeFav = !isHomeFav
-                    },
-                    contentPadding = PaddingValues(4.dp)
-                ) {
-                    Text(if (isHomeFav) "★" else "☆", color = if (isHomeFav) Color(0xFFFFD700) else LiveMuted, fontSize = 16.sp)
-                }
-                Text(
-                    text = match.homeScore,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Black
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-
-            // Away team row with star
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (match.awayLogo.isNotBlank()) {
-                    Image(
-                        painter = rememberAsyncImagePainter(match.awayLogo),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        contentScale = ContentScale.Fit
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
-                Text(
-                    text = match.awayTeam,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(
-                    onClick = {
-                        FavoritesStorage.toggle(context, match.awayTeam)
-                        isAwayFav = !isAwayFav
-                    },
-                    contentPadding = PaddingValues(4.dp)
-                ) {
-                    Text(if (isAwayFav) "★" else "☆", color = if (isAwayFav) Color(0xFFFFD700) else LiveMuted, fontSize = 16.sp)
-                }
-                Text(
-                    text = match.awayScore,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Black
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Csapat színű szegélyek
+            Box(Modifier.width(4.dp).fillMaxHeight().background(homeColor))
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(14.dp)
             ) {
-                val badgeText = when {
-                    match.status == "ÉLŐ" && match.startTime.isNotBlank() -> match.startTime
-                    match.status.isNotBlank() -> match.status
-                    match.startTime.isNotBlank() -> match.startTime
-                    else -> "PROGRAM"
+                val headerMeta = buildList {
+                    if (match.country.isNotBlank()) add(match.country)
+                    if (match.league.isNotBlank()) add(match.league)
+                    if (match.venue.isNotBlank()) add(match.venue)
+                }.joinToString(" · ")
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = headerMeta,
+                        color = LiveMuted,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (hasFavorite) {
+                        Text("⭐", fontSize = 14.sp)
+                    }
                 }
-                Text(
-                    text = badgeText,
-                    color = badgeColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Spacer(Modifier.height(10.dp))
+
+                // Home team row with star
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .background(homeColor, RoundedCornerShape(2.dp))
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    if (match.homeLogo.isNotBlank()) {
+                        Image(
+                            painter = rememberAsyncImagePainter(match.homeLogo),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        text = match.homeTeam,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = {
+                            FavoritesStorage.toggle(context, match.homeTeam)
+                            isHomeFav = !isHomeFav
+                        },
+                        contentPadding = PaddingValues(4.dp)
+                    ) {
+                        Text(if (isHomeFav) "★" else "☆", color = if (isHomeFav) Color(0xFFFFD700) else LiveMuted, fontSize = 16.sp)
+                    }
+                    Text(
+                        text = match.homeScore,
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+
+                // Away team row with star
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .background(awayColor, RoundedCornerShape(2.dp))
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    if (match.awayLogo.isNotBlank()) {
+                        Image(
+                            painter = rememberAsyncImagePainter(match.awayLogo),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        text = match.awayTeam,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = {
+                            FavoritesStorage.toggle(context, match.awayTeam)
+                            isAwayFav = !isAwayFav
+                        },
+                        contentPadding = PaddingValues(4.dp)
+                    ) {
+                        Text(if (isAwayFav) "★" else "☆", color = if (isAwayFav) Color(0xFFFFD700) else LiveMuted, fontSize = 16.sp)
+                    }
+                    Text(
+                        text = match.awayScore,
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    val badgeText = when {
+                        match.status == "ÉLŐ" && match.startTime.isNotBlank() -> match.startTime
+                        match.status.isNotBlank() -> match.status
+                        match.startTime.isNotBlank() -> match.startTime
+                        else -> "PROGRAM"
+                    }
+                    Text(
+                        text = badgeText,
+                        color = badgeColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
+            Box(Modifier.width(4.dp).fillMaxHeight().background(awayColor))
         }
     }
+}
+
+private fun teamColor(name: String): Color {
+    val hash = name.hashCode()
+    val hue = (hash and 0xFFFFFF) % 360
+    return Color.hsv(hue.toFloat(), 0.65f, 0.85f)
 }

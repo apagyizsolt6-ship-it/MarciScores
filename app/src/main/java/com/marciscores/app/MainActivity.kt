@@ -39,18 +39,35 @@ private val AppBlue = Color(0xFF4DA6FF)
 
 @Composable
 fun MarciScoresApp() {
+    val context = LocalContext.current
+    var isDark by remember { mutableStateOf(ThemeStorage.isDark(context)) }
     var showSettings by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf("Főoldal") }
 
-    MaterialTheme(
-        colorScheme = darkColorScheme(
+    val colorScheme = if (isDark) {
+        darkColorScheme(
             primary = AppGreen,
             background = AppBackground,
             surface = AppPanel
         )
-    ) {
+    } else {
+        lightColorScheme(
+            primary = Color(0xFF00A152),
+            background = Color(0xFFF5F7FA),
+            surface = Color.White
+        )
+    }
+
+    MaterialTheme(colorScheme = colorScheme) {
         if (showSettings) {
-            SettingsScreen(onBack = { showSettings = false })
+            SettingsScreen(
+                onBack = { showSettings = false },
+                isDark = isDark,
+                onThemeChange = { newDark ->
+                    isDark = newDark
+                    ThemeStorage.setDark(context, newDark)
+                }
+            )
         } else {
             Scaffold(
                 containerColor = AppBackground,

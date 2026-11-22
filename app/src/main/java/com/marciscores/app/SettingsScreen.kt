@@ -24,7 +24,9 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    isDark: Boolean = true,
+    onThemeChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -124,9 +126,40 @@ fun SettingsScreen(
             lineHeight = 21.sp
         )
 
-        Spacer(
-            Modifier.height(22.dp)
-        )
+        Spacer(Modifier.height(16.dp))
+
+        // Téma váltó
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111A2E)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Megjelenés", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isDark) "Sötét téma" else "Világos téma",
+                        color = Color(0xFF9EABC7),
+                        fontSize = 13.sp
+                    )
+                }
+                Switch(
+                    checked = isDark,
+                    onCheckedChange = { onThemeChange(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF20E875),
+                        checkedTrackColor = Color(0xFF173B32)
+                    )
+                )
+            }
+        }
+
+        Spacer(Modifier.height(22.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
