@@ -147,7 +147,11 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
 
     val grouped = remember(filteredMatches) {
         filteredMatches
-            .groupBy { "${it.country.ifBlank { "Egyéb" }} · ${it.league.ifBlank { "Ismeretlen bajnokság" }}" }
+            .groupBy { 
+                val country = translateCountry(it.country.ifBlank { "Egyéb" })
+                val league = translateLeague(it.league.ifBlank { "Ismeretlen bajnokság" })
+                "$country · $league"
+            }
             .toList()
             .sortedBy { it.first }
     }
@@ -711,5 +715,62 @@ private fun leagueAccentColor(key: String): Color {
         k.contains("europa") -> Color(0xFFFFA500)
         k.contains("nb i") || k.contains("otp") -> Color(0xFFC8102E)
         else -> Color(0xFF20E875)
+    }
+}
+
+private fun translateCountry(name: String): String {
+    val n = name.trim().lowercase()
+    return when {
+        n.contains("england") || n == "eng" -> "Anglia"
+        n.contains("spain") || n == "esp" -> "Spanyolország"
+        n.contains("italy") || n == "ita" -> "Olaszország"
+        n.contains("germany") || n == "ger" -> "Németország"
+        n.contains("france") || n == "fra" -> "Franciaország"
+        n.contains("hungary") || n == "hun" -> "Magyarország"
+        n.contains("portugal") -> "Portugália"
+        n.contains("netherlands") || n.contains("holland") -> "Hollandia"
+        n.contains("belgium") -> "Belgium"
+        n.contains("turkey") || n.contains("türkiye") -> "Törökország"
+        n.contains("brazil") -> "Brazília"
+        n.contains("argentina") -> "Argentína"
+        n.contains("usa") || n.contains("united states") -> "USA"
+        n.contains("albania") -> "Albánia"
+        n.contains("croatia") -> "Horvátország"
+        n.contains("serbia") -> "Szerbia"
+        n.contains("romania") -> "Románia"
+        n.contains("poland") -> "Lengyelország"
+        n.contains("czech") -> "Csehország"
+        n.contains("austria") -> "Ausztria"
+        n.contains("switzerland") -> "Svájc"
+        n.contains("scotland") -> "Skócia"
+        n.contains("greece") -> "Görögország"
+        n.contains("ukraine") -> "Ukrajna"
+        n.contains("russia") -> "Oroszország"
+        n.isBlank() -> "Egyéb"
+        else -> name.replaceFirstChar { it.uppercase() }
+    }
+}
+
+private fun translateLeague(name: String): String {
+    val n = name.trim().lowercase()
+    return when {
+        n.contains("premier league") -> "Premier League"
+        n.contains("la liga") || n.contains("laliga") -> "La Liga"
+        n.contains("serie a") -> "Serie A"
+        n.contains("bundesliga") -> "Bundesliga"
+        n.contains("ligue 1") -> "Ligue 1"
+        n.contains("champions league") -> "Bajnokok Ligája"
+        n.contains("europa league") -> "Európa-liga"
+        n.contains("conference league") -> "Konferencia-liga"
+        n.contains("nb i") || n.contains("otp bank") -> "NB I"
+        n.contains("nb ii") -> "NB II"
+        n.contains("eredivisie") -> "Eredivisie"
+        n.contains("primeira liga") -> "Portugál liga"
+        n.contains("super lig") -> "Török Szuperliga"
+        n.contains("mls") -> "MLS"
+        n.contains("brasileirao") || n.contains("serie a brazil") -> "Brazil Serie A"
+        n.contains("friendly") || n.contains("barátságos") -> "Barátságos"
+        n.isBlank() -> "Ismeretlen bajnokság"
+        else -> name
     }
 }
