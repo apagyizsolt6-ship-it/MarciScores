@@ -718,59 +718,109 @@ private fun leagueAccentColor(key: String): Color {
     }
 }
 
+
+private val countryMap = mapOf(
+    "england" to "Anglia", "spain" to "Spanyolország", "italy" to "Olaszország",
+    "germany" to "Németország", "france" to "Franciaország", "hungary" to "Magyarország",
+    "portugal" to "Portugália", "netherlands" to "Hollandia", "holland" to "Hollandia",
+    "belgium" to "Belgium", "turkey" to "Törökország", "türkiye" to "Törökország",
+    "albania" to "Albánia", "croatia" to "Horvátország", "serbia" to "Szerbia",
+    "romania" to "Románia", "poland" to "Lengyelország", "czech" to "Csehország",
+    "czechia" to "Csehország", "austria" to "Ausztria", "switzerland" to "Svájc",
+    "scotland" to "Skócia", "greece" to "Görögország", "ukraine" to "Ukrajna",
+    "russia" to "Oroszország", "denmark" to "Dánia", "sweden" to "Svédország",
+    "norway" to "Norvégia", "finland" to "Finnország", "ireland" to "Írország",
+    "wales" to "Wales", "cyprus" to "Ciprus", "estonia" to "Észtország",
+    "latvia" to "Lettország", "lithuania" to "Litvánia", "luxembourg" to "Luxemburg",
+    "bosnia" to "Bosznia-Hercegovina", "slovenia" to "Szlovénia", "slovakia" to "Szlovákia",
+    "bulgaria" to "Bulgária", "macedonia" to "Észak-Macedónia", "montenegro" to "Montenegró",
+    "kosovo" to "Koszovó", "moldova" to "Moldova", "belarus" to "Fehéroroszország",
+    "iceland" to "Izland", "malta" to "Málta", "gibraltar" to "Gibraltár",
+    "andorra" to "Andorra", "san marino" to "San Marino", "liechtenstein" to "Liechtenstein",
+    "brazil" to "Brazília", "argentina" to "Argentína", "usa" to "USA",
+    "united states" to "USA", "america" to "USA", "mexico" to "Mexikó",
+    "chile" to "Chile", "colombia" to "Kolumbia", "peru" to "Peru",
+    "uruguay" to "Uruguay", "paraguay" to "Paraguay", "ecuador" to "Ecuador",
+    "bolivia" to "Bolívia", "venezuela" to "Venezuela", "costa rica" to "Costa Rica",
+    "honduras" to "Honduras", "guatemala" to "Guatemala", "el salvador" to "El Salvador",
+    "panama" to "Panama", "nicaragua" to "Nicaragua", "dominican" to "Dominikai Köztársaság",
+    "jamaica" to "Jamaica", "canada" to "Kanada", "japan" to "Japán",
+    "korea" to "Dél-Korea", "south korea" to "Dél-Korea", "china" to "Kína",
+    "india" to "India", "indonesia" to "Indonézia", "thailand" to "Thaiföld",
+    "vietnam" to "Vietnám", "malaysia" to "Malajzia", "singapore" to "Szingapúr",
+    "hong kong" to "Hongkong", "saudi" to "Szaúd-Arábia", "uae" to "Egyesült Arab Emírségek",
+    "emirates" to "Egyesült Arab Emírségek", "qatar" to "Katar", "iran" to "Irán",
+    "iraq" to "Irak", "israel" to "Izrael", "jordan" to "Jordánia",
+    "lebanon" to "Libanon", "syria" to "Szíria", "kuwait" to "Kuvait",
+    "bahrain" to "Bahrein", "oman" to "Omán", "australia" to "Ausztrália",
+    "new zealand" to "Új-Zéland", "south africa" to "Dél-Afrika", "egypt" to "Egyiptom",
+    "morocco" to "Marokkó", "tunisia" to "Tunézia", "algeria" to "Algéria",
+    "nigeria" to "Nigéria", "ghana" to "Ghána", "cameroon" to "Kamerun",
+    "senegal" to "Szenegál", "ivory coast" to "Elefántcsontpart", "cote d" to "Elefántcsontpart",
+    "kenya" to "Kenya", "ethiopia" to "Etiópia", "congo" to "Kongó",
+    "liberia" to "Libéria", "libya" to "Líbia", "zimbabwe" to "Zimbabwe",
+    "zambia" to "Zambia", "uganda" to "Uganda", "tanzania" to "Tanzánia",
+    "angola" to "Angola", "mozambique" to "Mozambik", "cambodia" to "Kambodzsa",
+    "philippines" to "Fülöp-szigetek", "pakistan" to "Pakisztán", "bangladesh" to "Banglades",
+    "sri lanka" to "Srí Lanka", "myanmar" to "Mianmar", "nepal" to "Nepál",
+    "afghanistan" to "Afganisztán", "kazakhstan" to "Kazahsztán", "uzbekistan" to "Üzbegisztán",
+    "georgia" to "Grúzia", "armenia" to "Örményország", "azerbaijan" to "Azerbajdzsán"
+)
+
 private fun translateCountry(name: String): String {
     val n = name.trim().lowercase()
-    return when {
-        n.contains("england") || n == "eng" -> "Anglia"
-        n.contains("spain") || n == "esp" -> "Spanyolország"
-        n.contains("italy") || n == "ita" -> "Olaszország"
-        n.contains("germany") || n == "ger" -> "Németország"
-        n.contains("france") || n == "fra" -> "Franciaország"
-        n.contains("hungary") || n == "hun" -> "Magyarország"
-        n.contains("portugal") -> "Portugália"
-        n.contains("netherlands") || n.contains("holland") -> "Hollandia"
-        n.contains("belgium") -> "Belgium"
-        n.contains("turkey") || n.contains("türkiye") -> "Törökország"
-        n.contains("brazil") -> "Brazília"
-        n.contains("argentina") -> "Argentína"
-        n.contains("usa") || n.contains("united states") -> "USA"
-        n.contains("albania") -> "Albánia"
-        n.contains("croatia") -> "Horvátország"
-        n.contains("serbia") -> "Szerbia"
-        n.contains("romania") -> "Románia"
-        n.contains("poland") -> "Lengyelország"
-        n.contains("czech") -> "Csehország"
-        n.contains("austria") -> "Ausztria"
-        n.contains("switzerland") -> "Svájc"
-        n.contains("scotland") -> "Skócia"
-        n.contains("greece") -> "Görögország"
-        n.contains("ukraine") -> "Ukrajna"
-        n.contains("russia") -> "Oroszország"
-        n.isBlank() -> "Egyéb"
-        else -> name.replaceFirstChar { it.uppercase() }
+    if (n.isBlank()) return "Egyéb"
+    // Pontos egyezés először
+    countryMap[n]?.let { return it }
+    // Részleges egyezés
+    for ((key, value) in countryMap) {
+        if (n.contains(key)) return value
     }
+    return name.replaceFirstChar { it.uppercase() }
 }
 
 private fun translateLeague(name: String): String {
     val n = name.trim().lowercase()
+    if (n.isBlank()) return "Ismeretlen bajnokság"
     return when {
-        n.contains("premier league") -> "Premier League"
+        n.contains("premier league") && !n.contains("women") -> "Premier League"
         n.contains("la liga") || n.contains("laliga") -> "La Liga"
-        n.contains("serie a") -> "Serie A"
+        n.contains("serie a") && !n.contains("brazil") -> "Serie A"
         n.contains("bundesliga") -> "Bundesliga"
-        n.contains("ligue 1") -> "Ligue 1"
+        n.contains("ligue 1") && !n.contains("women") -> "Ligue 1"
         n.contains("champions league") -> "Bajnokok Ligája"
         n.contains("europa league") -> "Európa-liga"
         n.contains("conference league") -> "Konferencia-liga"
-        n.contains("nb i") || n.contains("otp bank") -> "NB I"
+        n.contains("nb i") || n.contains("otp") -> "NB I"
         n.contains("nb ii") -> "NB II"
         n.contains("eredivisie") -> "Eredivisie"
-        n.contains("primeira liga") -> "Portugál liga"
+        n.contains("primeira") -> "Portugál liga"
         n.contains("super lig") -> "Török Szuperliga"
-        n.contains("mls") -> "MLS"
-        n.contains("brasileirao") || n.contains("serie a brazil") -> "Brazil Serie A"
+        n.contains("super league") -> "Szuperliga"
+        n.contains("superliga") -> "Szuperliga"
+        n.contains("ekstraklasa") -> "Ekstraklasa"
+        n.contains("allsvenskan") -> "Allsvenskan"
+        n.contains("eliteserien") -> "Eliteserien"
+        n.contains("veikkausliiga") -> "Veikkausliiga"
+        n.contains("hnl") -> "HNL"
+        n.contains("prva") -> "Prva Liga"
+        n.contains("liga mx") -> "Liga MX"
+        n.contains("brasileirao") -> "Brazil Serie A"
+        n.contains("division 1") || n.contains("first division") || n.contains("1st division") -> "Első osztály"
+        n.contains("division 2") || n.contains("second division") || n.contains("2nd division") -> "Másodosztály"
+        n.contains("division 3") || n.contains("third division") -> "Harmadosztály"
+        n.contains("youth") || n.contains("u19") || n.contains("u20") || n.contains("u21") || n.contains("u23") || n.contains("u17") -> "Ifjúsági"
+        n.contains("women") || n.contains("femenino") || n.contains("frauen") || n.contains("ladies") -> "Női"
         n.contains("friendly") || n.contains("barátságos") -> "Barátságos"
-        n.isBlank() -> "Ismeretlen bajnokság"
+        n.contains("cup") || n.contains("kupa") || n.contains("copa") || n.contains("pokal") -> "Kupa"
+        n.contains("play off") || n.contains("playoff") || n.contains("play-offs") -> "Rájátszás"
+        n.contains("relegation") -> "Kiesés"
+        n.contains("promotion") -> "Feljutás"
+        n.contains("apertura") -> "Apertura"
+        n.contains("clausura") -> "Clausura"
+        n.contains("championship") -> "Bajnokság"
+        n.contains("national") && n.contains("league") -> "Nemzeti liga"
+        n.contains("regional") -> "Regionális"
         else -> name
     }
 }
