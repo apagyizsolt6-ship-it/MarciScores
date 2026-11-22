@@ -3,6 +3,7 @@ package com.marciscores.app
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -404,7 +405,10 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 contentPadding = PaddingValues(bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
+                val expandedLeagues = remember { mutableStateMapOf<String, Boolean>() }
+
                 grouped.forEach { (leagueKey, matches) ->
+                    val isExpanded = expandedLeagues.getOrDefault(leagueKey, true)
                     item(key = "header-$leagueKey") {
                         val first = matches.firstOrNull()
                         val leagueColor = leagueAccentColor(leagueKey)
@@ -412,6 +416,7 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(leagueColor.copy(alpha = 0.18f))
+                                .clickable { expandedLeagues[leagueKey] = !isExpanded }
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -450,13 +455,21 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                                 }
                             }
                             Text("${matches.size}", color = leagueColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (isExpanded) "▼" else "▶", color = leagueColor, fontSize = 10.sp)
                         }
                     }
-                    items(
-                        items = matches,
-                        key = { "${it.id}_${it.homeTeam}_${it.awayTeam}" }
-                    ) { match ->
-                        LiveMatchCard(match = match, isLive = isUsingLive)
+                    if (isExpanded) {
+                        items(
+                            items = matches,
+                            key = { "${it.id}_${it.homeTeam}_${it.awayTeam}" }
+                        ) { match ->
+                            LiveMatchCard(
+                                match = match,
+                                isLive = isUsingLive,
+                                leagueColor = leagueAccentColor(leagueKey)
+                            )
+                        }
                     }
                 }
             }
@@ -467,11 +480,13 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
 @Composable
 private fun LiveMatchCard(
     match: LiveMatch,
-    isLive: Boolean
+    isLive: Boolean,
+    leagueColor: Color = LiveGreen
 ) {
     val context = LocalContext.current
     var isHomeFav by remember(match.homeTeam) { mutableStateOf(FavoritesStorage.isFavorite(context, match.homeTeam)) }
     var isAwayFav by remember(match.awayTeam) { mutableStateOf(FavoritesStorage.isFavorite(context, match.awayTeam)) }
+    var expanded by remember { mutableStateOf(false) }
 
     val isLiveMatch = match.status == "ÉLŐ" || isLive
     val statusColor = when {
@@ -491,111 +506,158 @@ private fun LiveMatchCard(
     val hasFavorite = isHomeFav || isAwayFav
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded },
         colors = CardDefaults.cardColors(
             containerColor = if (hasFavorite) Color(0xFF1A2E1A) else LivePanel
         ),
         shape = RoundedCornerShape(0.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Státusz / perc balra (Flashscore stílus)
-            Box(
+        Column {
+            Row(
                 modifier = Modifier
-                    .width(52.dp)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = statusText,
-                    color = statusColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
+                // Liga színű csík bal oldalon
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .background(leagueColor)
                 )
-            }
 
-            // Csapatok középen
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 6.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(6.dp).background(homeColor, RoundedCornerShape(1.dp)))
-                    Spacer(Modifier.width(6.dp))
+                // Státusz / perc
+                Box(
+                    modifier = Modifier
+                        .width(50.dp)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isLiveMatch) {
+                        Text("●", color = LiveGreen, fontSize = 10.sp)
+                        Spacer(Modifier.height(2.dp))
+                    }
                     Text(
-                        text = match.homeTeam,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = if (isHomeFav) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                        text = statusText,
+                        color = statusColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
-                    if (isHomeFav) Text("★", color = Color(0xFFFFD700), fontSize = 12.sp)
                 }
-                Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(6.dp).background(awayColor, RoundedCornerShape(1.dp)))
-                    Spacer(Modifier.width(6.dp))
+
+                // Csapatok
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(6.dp).background(homeColor, RoundedCornerShape(1.dp)))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = match.homeTeam,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = if (isHomeFav) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isHomeFav) Text("★", color = Color(0xFFFFD700), fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(6.dp).background(awayColor, RoundedCornerShape(1.dp)))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = match.awayTeam,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = if (isAwayFav) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isAwayFav) Text("★", color = Color(0xFFFFD700), fontSize = 11.sp)
+                    }
+                }
+
+                // Eredmény
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.width(42.dp)
+                ) {
                     Text(
-                        text = match.awayTeam,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = if (isAwayFav) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                        text = match.homeScore.ifBlank { "-" },
+                        color = if (isLiveMatch) LiveGreen else Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    if (isAwayFav) Text("★", color = Color(0xFFFFD700), fontSize = 12.sp)
+                    Text(
+                        text = match.awayScore.ifBlank { "-" },
+                        color = if (isLiveMatch) LiveGreen else Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Kedvenc
+                TextButton(
+                    onClick = {
+                        val team = if (isHomeFav || !isAwayFav) match.homeTeam else match.awayTeam
+                        FavoritesStorage.toggle(context, team)
+                        if (team == match.homeTeam) isHomeFav = !isHomeFav else isAwayFav = !isAwayFav
+                    },
+                    contentPadding = PaddingValues(4.dp),
+                    modifier = Modifier.width(32.dp)
+                ) {
+                    Text(
+                        if (hasFavorite) "★" else "☆",
+                        color = if (hasFavorite) Color(0xFFFFD700) else LiveMuted,
+                        fontSize = 16.sp
+                    )
                 }
             }
 
-            // Eredmény jobbra
-            Column(
-                horizontalAlignment = Alignment.End,
-                modifier = Modifier.width(48.dp)
-            ) {
-                Text(
-                    text = match.homeScore.ifBlank { "-" },
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = match.awayScore.ifBlank { "-" },
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // Kedvenc csillag
-            TextButton(
-                onClick = {
-                    val team = if (isHomeFav || !isAwayFav) match.homeTeam else match.awayTeam
-                    FavoritesStorage.toggle(context, team)
-                    if (team == match.homeTeam) isHomeFav = !isHomeFav else isAwayFav = !isAwayFav
-                },
-                contentPadding = PaddingValues(4.dp),
-                modifier = Modifier.width(36.dp)
-            ) {
-                Text(
-                    if (hasFavorite) "★" else "☆",
-                    color = if (hasFavorite) Color(0xFFFFD700) else LiveMuted,
-                    fontSize = 18.sp
-                )
+            // Kinyitható részletek
+            if (expanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0D1528))
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    if (match.venue.isNotBlank()) {
+                        Text("📍 ${match.venue}", color = LiveMuted, fontSize = 12.sp)
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    if (match.matchDate.isNotBlank()) {
+                        Text("📅 ${match.matchDate}", color = LiveMuted, fontSize = 12.sp)
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("Hazai: ${match.homeScore}", color = homeColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Vendég: ${match.awayScore}", color = awayColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        if (isLiveMatch) "● Élő mérkőzés" else "Státusz: $statusText",
+                        color = statusColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text("Koppints a bezáráshoz", color = LiveMuted.copy(alpha = 0.6f), fontSize = 10.sp)
+                }
             }
         }
     }
 }
-
 private fun teamColor(name: String): Color {
     val hash = name.hashCode()
     val hue = (hash and 0xFFFFFF) % 360
