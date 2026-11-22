@@ -40,9 +40,9 @@ private data class DayOption(
 )
 
 private val DayOptions = listOf(
-    DayOption(-1, "Tegnap (-1)"),
-    DayOption(0, "Ma (0)"),
-    DayOption(1, "Holnap (+1)"),
+    DayOption(-1, "Tegnap"),
+    DayOption(0, "Ma"),
+    DayOption(1, "Holnap"),
     DayOption(2, "+2 nap"),
     DayOption(3, "+3 nap"),
     DayOption(4, "+4 nap"),
@@ -305,8 +305,9 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
 
         // Állapotsor + Frissítés + Mind nyit/zár
         val expandedLeagues = remember { mutableStateMapOf<String, Boolean>() }
-        val allExpanded = remember(grouped.keys, expandedLeagues.toMap()) {
-            grouped.keys.all { expandedLeagues.getOrDefault(it, true) }
+        val leagueKeys = remember(grouped) { grouped.map { it.first } }
+        val allExpanded = remember(leagueKeys, expandedLeagues.toMap()) {
+            leagueKeys.all { expandedLeagues.getOrDefault(it, true) }
         }
 
         Row(
@@ -336,7 +337,7 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
             TextButton(
                 onClick = {
                     val newState = !allExpanded
-                    grouped.keys.forEach { key -> expandedLeagues[key] = newState }
+                    leagueKeys.forEach { key -> expandedLeagues[key] = newState }
                 }
             ) {
                 Text(if (allExpanded) "▼ Mind" else "▶ Mind", color = LiveGreen, fontSize = 12.sp)
@@ -465,7 +466,13 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                                     )
                                 }
                             }
-                            Text("${matches.size}", color = leagueColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            val liveCount = matches.count { it.status == "ÉLŐ" }
+                            Text(
+                                text = if (!isExpanded && liveCount > 0) "$liveCount élő" else "${matches.size}",
+                                color = if (!isExpanded && liveCount > 0) LiveGreen else leagueColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                             Spacer(Modifier.width(6.dp))
                             Text(if (isExpanded) "▼" else "▶", color = leagueColor, fontSize = 10.sp)
                         }
@@ -498,6 +505,19 @@ private fun LiveMatchCard(
     var isHomeFav by remember(match.homeTeam) { mutableStateOf(FavoritesStorage.isFavorite(context, match.homeTeam)) }
     var isAwayFav by remember(match.awayTeam) { mutableStateOf(FavoritesStorage.isFavorite(context, match.awayTeam)) }
     var expanded by remember { mutableStateOf(false) }
+    var flashing by remember { mutableStateOf(false) }
+    var prevScore by remember { mutableStateOf("${match.homeScore}-${match.awayScore}") }
+
+    // Gól villanás
+    LaunchedEffect(match.homeScore, match.awayScore) {
+        val newScore = "${match.homeScore}-${match.awayScore}"
+        if (prevScore != newScore && prevScore != "-") {
+            flashing = true
+            delay(800)
+            flashing = false
+        }
+        prevScore = newScore
+    }
 
     val isLiveMatch = match.status == "ÉLŐ" || isLive
     val statusColor = when {
@@ -521,7 +541,11 @@ private fun LiveMatchCard(
             .fillMaxWidth()
             .clickable { expanded = !expanded },
         colors = CardDefaults.cardColors(
-            containerColor = if (hasFavorite) Color(0xFF1A2E1A) else LivePanel
+            containerColor = when {
+                flashing -> Color(0xFF1B5E20)
+                hasFavorite -> Color(0xFF1A2E1A)
+                else -> LivePanel
+            }
         ),
         shape = RoundedCornerShape(0.dp)
     ) {
@@ -663,7 +687,7 @@ private fun LiveMatchCard(
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text("Koppints a bezáráshoz", color = LiveMuted.copy(alpha = 0.6f), fontSize = 10.sp)
+                    Text("Koppints a részletek bezárásához", color = LiveMuted.copy(alpha = 0.6f), fontSize = 10.sp)
                 }
             }
         }
