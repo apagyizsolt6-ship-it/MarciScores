@@ -472,15 +472,30 @@ class StatPalApi {
     }
 
     private fun findDateContainerWithKey(root: JSONObject): Pair<String, JSONObject>? {
+        // Direct league array on root
         if (root.has("league") && root.opt("league") is JSONArray) {
             return "root" to root
         }
-        root.optJSONObject("data")?.let { dataObj ->
-            if (dataObj.has("league") && dataObj.opt("league") is JSONArray) {
-                return "data" to dataObj
+
+        // Check common wrapper keys used by StatPal Soccer v2
+        val wrapperKeys = listOf(
+            "live_matches",
+            "daily_matches",
+            "matches",
+            "fixtures",
+            "results",
+            "data"
+        )
+        for (key in wrapperKeys) {
+            val container = root.optJSONObject(key) ?: continue
+            if (container.has("league") && container.opt("league") is JSONArray) {
+                return key to container
             }
-            findMatchesKeyObject(dataObj)?.let { return it }
+            // Nested date-style key inside wrapper
+            findMatchesKeyObject(container)?.let { return it }
         }
+
+        // Legacy / alternative: keys starting with matches_
         return findMatchesKeyObject(root)
     }
 
@@ -488,8 +503,15 @@ class StatPalApi {
         val keys = obj.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            if (key.startsWith("matches_", ignoreCase = true)) {
-                obj.optJSONObject(key)?.let { return key to it }
+            if (key.startsWith("matches_", ignoreCase = true) ||
+                key.equals("live_matches", ignoreCase = true) ||
+                key.equals("daily_matches", ignoreCase = true)
+            ) {
+                obj.optJSONObject(key)?.let { container ->
+                    if (container.has("league") && container.opt("league") is JSONArray) {
+                        return key to container
+                    }
+                }
             }
         }
         return null
