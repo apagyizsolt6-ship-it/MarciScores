@@ -3,6 +3,7 @@ package com.marciscores.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -23,9 +24,27 @@ import java.util.Locale
 
 private val LiveBg = Color(0xFF070B18)
 private val LivePanel = Color(0xFF111A2E)
+private val LivePanelAlt = Color(0xFF18243E)
 private val LiveGreen = Color(0xFF20E875)
 private val LiveMuted = Color(0xFF9EABC7)
 private val LiveAmber = Color(0xFFFFB84D)
+
+private data class DayOption(
+    val offset: Int,
+    val label: String
+)
+
+private val DayOptions = listOf(
+    DayOption(-1, "Tegnap (-1)"),
+    DayOption(0, "Ma (0)"),
+    DayOption(1, "Holnap (+1)"),
+    DayOption(2, "+2 nap"),
+    DayOption(3, "+3 nap"),
+    DayOption(4, "+4 nap"),
+    DayOption(5, "+5 nap"),
+    DayOption(6, "+6 nap"),
+    DayOption(7, "+7 nap")
+)
 
 @Composable
 fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
@@ -33,15 +52,18 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
     val api = remember { StatPalApi() }
     val scope = rememberCoroutineScope()
 
+    var selectedOffset by remember { mutableIntStateOf(0) }
+    var searchQuery by remember { mutableStateOf("") }
+    var onlyLive by remember { mutableStateOf(false) }
+
     var liveMatches by remember { mutableStateOf<List<LiveMatch>>(emptyList()) }
-    var dailyFallbackMatches by remember { mutableStateOf<List<LiveMatch>>(emptyList()) }
-    var showingDailyFallback by remember { mutableStateOf(false) }
+    var dailyMatches by remember { mutableStateOf<List<LiveMatch>>(emptyList()) }
     var debugSummary by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var lastUpdated by remember { mutableStateOf("") }
 
-    suspend fun refreshMatches() {
+    suspend fun refreshMatches(targetOffset: Int = selectedOffset) {
         if (loading) return
         loading = true
         error = null
@@ -52,46 +74,60 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
 
             val notes = mutableListOf(liveResult.diagnosticInfo)
 
-            if (liveResult.matches.isEmpty()) {
-                val dailyResult = try {
-                    api.getDailyMatchesWithDiagnostics(key, offset = -1)
-                } catch (e: Exception) {
-                    notes.add("daily(offset=-1) hiba: ${e.message}")
-                    null
-                }
+            val dailyResult = try {
+                api.getDailyMatchesWithDiagnostics(key, offset = targetOffset)
+            } catch (e: Exception) {
+                notes.add("daily(offset=$targetOffset) hiba: ${e.message}")
+                null
+            }
 
-                if (dailyResult != null) {
-                    notes.add(dailyResult.diagnosticInfo)
-                    dailyFallbackMatches = dailyResult.matches
-                    showingDailyFallback = dailyResult.matches.isNotEmpty()
-                } else {
-                    dailyFallbackMatches = emptyList()
-                    showingDailyFallback = false
-                }
+            if (dailyResult != null) {
+                notes.add(dailyResult.diagnosticInfo)
+                dailyMatches = dailyResult.matches
             } else {
-                dailyFallbackMatches = emptyList()
-                showingDailyFallback = false
+                dailyMatches = emptyList()
             }
 
             debugSummary = notes.joinToString("\n")
-            val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-            lastUpdated = timeFormat.format(Date())
+            lastUpdated = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         } catch (exception: Exception) {
-            error = exception.message ?: "Nem sikerült lekérni az élő mérkőzéseket."
+            error = exception.message ?: "Nem sikerült lekérni a mérkőzéseket."
         } finally {
             loading = false
         }
     }
 
+    LaunchedEffect(selectedOffset) {
+        refreshMatches(selectedOffset)
+    }
+
     LaunchedEffect(Unit) {
-        refreshMatches()
         while (true) {
             delay(30_000)
-            refreshMatches()
+            refreshMatches(selectedOffset)
         }
     }
 
-    val displayedMatches = if (liveMatches.isNotEmpty()) liveMatches else dailyFallbackMatches
+    val isUsingLive = onlyLive || (liveMatches.isNotEmpty() && selectedOffset == 0)
+    val baseList = when {
+        onlyLive -> liveMatches
+        selectedOffset == 0 && liveMatches.isNotEmpty() -> liveMatches
+        else -> dailyMatches
+    }
+
+    val filteredMatches = remember(baseList, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        if (q.isBlank()) {
+            baseList
+        } else {
+            baseList.filter { m ->
+                m.homeTeam.lowercase().contains(q) ||
+                    m.awayTeam.lowercase().contains(q) ||
+                    m.league.lowercase().contains(q) ||
+                    m.country.lowercase().contains(q)
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -103,25 +139,25 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 18.dp, bottom = 14.dp),
+                .padding(top = 18.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "ÉLŐ MÉRKŐZÉSEK",
+                    text = "ÉLŐ ÉS NAPI MÉRKŐZÉSEK",
                     color = LiveGreen,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Eredmények valós időben",
+                    text = "Eredmények és program",
                     color = Color.White,
                     fontSize = 23.sp,
                     fontWeight = FontWeight.Black
                 )
                 if (lastUpdated.isNotBlank()) {
                     Text(
-                        text = "Frissítve: $lastUpdated · automatikus frissítés 30 mp-enként",
+                        text = "Frissítve: $lastUpdated · auto 30 mp",
                         color = LiveMuted,
                         fontSize = 10.sp
                     )
@@ -132,32 +168,107 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
             }
         }
 
+        // Napváltó sáv (-1..+7)
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                FilterChip(
+                    selected = onlyLive,
+                    onClick = { onlyLive = !onlyLive },
+                    label = {
+                        Text(
+                            text = "● Élő (${liveMatches.size})",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = LivePanel,
+                        labelColor = LiveMuted,
+                        selectedContainerColor = LiveGreen,
+                        selectedLabelColor = Color(0xFF07130D)
+                    )
+                )
+            }
+            items(DayOptions, key = { it.offset }) { option ->
+                val isSelected = !onlyLive && selectedOffset == option.offset
+                FilterChip(
+                    selected = isSelected,
+                    onClick = {
+                        onlyLive = false
+                        selectedOffset = option.offset
+                    },
+                    label = {
+                        Text(
+                            text = option.label,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = LivePanel,
+                        labelColor = LiveMuted,
+                        selectedContainerColor = LivePanelAlt,
+                        selectedLabelColor = Color.White
+                    )
+                )
+            }
+        }
+
+        // Gyors kereső
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp),
+            singleLine = true,
+            placeholder = {
+                Text("Keresés csapatra, bajnokságra, országra…", color = LiveMuted, fontSize = 13.sp)
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = LivePanel,
+                unfocusedContainerColor = LivePanel,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = LiveGreen,
+                unfocusedBorderColor = LivePanelAlt,
+                cursorColor = LiveGreen
+            ),
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        // Állapotsor + Frissítés
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp),
+                .padding(bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "●",
-                color = if (liveMatches.isNotEmpty()) LiveGreen else LiveMuted,
+                color = if (isUsingLive && filteredMatches.isNotEmpty()) LiveGreen else LiveAmber,
                 fontSize = 12.sp
             )
             Spacer(Modifier.width(7.dp))
             Text(
                 text = when {
-                    liveMatches.isNotEmpty() -> "${liveMatches.size} élő mérkőzés"
-                    showingDailyFallback -> "0 élő mérkőzés · Napi meccsek (offset=-1): ${displayedMatches.size}"
-                    else -> "0 élő mérkőzés"
+                    onlyLive -> "Élő szűrő: ${filteredMatches.size} meccs"
+                    selectedOffset == 0 && liveMatches.isNotEmpty() -> "Élő meccsek: ${filteredMatches.size}"
+                    else -> "Nap (offset=$selectedOffset): ${filteredMatches.size} meccs"
                 },
                 color = LiveMuted,
                 fontSize = 12.sp,
                 modifier = Modifier.weight(1f),
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             TextButton(
-                onClick = { scope.launch { refreshMatches() } },
+                onClick = { scope.launch { refreshMatches(selectedOffset) } },
                 enabled = !loading
             ) {
                 Text(if (loading) "Frissítés…" else "↻ Frissítés", color = LiveGreen)
@@ -183,7 +294,7 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                     }
                 }
             }
-        } else if (loading && displayedMatches.isEmpty()) {
+        } else if (loading && filteredMatches.isEmpty()) {
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -192,7 +303,7 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
             ) {
                 CircularProgressIndicator(color = LiveGreen)
             }
-        } else if (displayedMatches.isEmpty()) {
+        } else if (filteredMatches.isEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = LivePanel),
@@ -206,9 +317,14 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 ) {
                     Text("⚽", fontSize = 40.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text("Most nincs élő mérkőzés", color = Color.White, fontWeight = FontWeight.Bold)
                     Text(
-                        "A lista automatikusan frissül.",
+                        text = if (searchQuery.isNotBlank()) "Nincs találat a keresésre" else "Nincs mérkőzés erre a napra/szűrőre",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Próbálj másik napot választani a felső sávban.",
                         color = LiveMuted,
                         fontSize = 12.sp
                     )
@@ -229,10 +345,10 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(
-                    items = displayedMatches,
+                    items = filteredMatches,
                     key = { "${it.id}_${it.homeTeam}_${it.awayTeam}_${it.startTime}" }
                 ) { match ->
-                    LiveMatchCard(match = match, isLive = liveMatches.isNotEmpty())
+                    LiveMatchCard(match = match, isLive = isUsingLive)
                 }
             }
         }
@@ -296,7 +412,7 @@ private fun LiveMatchCard(
                         match.status == "ÉLŐ" && match.startTime.isNotBlank() -> match.startTime
                         match.status.isNotBlank() -> match.status
                         match.startTime.isNotBlank() -> match.startTime
-                        else -> "NAPI"
+                        else -> "PROGRAM"
                     }
                     Text(
                         text = badgeText,
