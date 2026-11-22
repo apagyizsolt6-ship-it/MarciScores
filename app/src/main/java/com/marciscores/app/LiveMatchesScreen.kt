@@ -303,7 +303,12 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
             shape = RoundedCornerShape(12.dp)
         )
 
-        // Állapotsor + Frissítés
+        // Állapotsor + Frissítés + Mind nyit/zár
+        val expandedLeagues = remember { mutableStateMapOf<String, Boolean>() }
+        val allExpanded = remember(grouped.keys, expandedLeagues.toMap()) {
+            grouped.keys.all { expandedLeagues.getOrDefault(it, true) }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -329,10 +334,18 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             TextButton(
+                onClick = {
+                    val newState = !allExpanded
+                    grouped.keys.forEach { key -> expandedLeagues[key] = newState }
+                }
+            ) {
+                Text(if (allExpanded) "▼ Mind" else "▶ Mind", color = LiveGreen, fontSize = 12.sp)
+            }
+            TextButton(
                 onClick = { scope.launch { refreshMatches(selectedOffset) } },
                 enabled = !loading
             ) {
-                Text(if (loading) "Frissítés…" else "↻ Frissítés", color = LiveGreen)
+                Text(if (loading) "Frissítés…" else "↻", color = LiveGreen)
             }
         }
 
@@ -400,8 +413,6 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 }
             }
         } else {
-            val expandedLeagues = remember { mutableStateMapOf<String, Boolean>() }
-
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 12.dp),
