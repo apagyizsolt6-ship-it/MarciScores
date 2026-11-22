@@ -21,7 +21,11 @@ data class LiveMatch(
     val status: String,
     val startTime: String = "",
     val venue: String = "",
-    val matchDate: String = ""
+    val matchDate: String = "",
+    val homeLogo: String = "",
+    val awayLogo: String = "",
+    val leagueLogo: String = "",
+    val countryFlag: String = ""
 )
 
 /** Diagnostic result when fetching matches so empty lists can be debugged easily. */
@@ -773,6 +777,11 @@ class StatPalApi {
         val venue = firstText("venue_name", "venueName", "stadium")
             .ifBlank { venueObject?.firstText("name", "title").orEmpty() }
 
+        val homeLogo = homeObject?.firstText("logo", "image", "crest", "badge", "flag").orEmpty()
+        val awayLogo = awayObject?.firstText("logo", "image", "crest", "badge", "flag").orEmpty()
+        val leagueLogo = leagueObject?.firstText("logo", "image", "crest", "badge").orEmpty()
+        val countryFlag = countryObject?.firstText("flag", "image", "logo", "crest").orEmpty()
+
         return LiveMatch(
             id = id,
             country = country,
@@ -784,7 +793,11 @@ class StatPalApi {
             status = status,
             startTime = startTime,
             venue = venue,
-            matchDate = matchDate
+            matchDate = matchDate,
+            homeLogo = homeLogo,
+            awayLogo = awayLogo,
+            leagueLogo = leagueLogo,
+            countryFlag = countryFlag
         )
     }
 

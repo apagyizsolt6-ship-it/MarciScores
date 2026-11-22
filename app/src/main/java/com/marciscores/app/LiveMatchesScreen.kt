@@ -1,5 +1,6 @@
 package com.marciscores.app
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,12 +11,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -127,6 +131,13 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                     m.country.lowercase().contains(q)
             }
         }
+    }
+
+    val grouped = remember(filteredMatches) {
+        filteredMatches
+            .groupBy { "${it.country.ifBlank { "Egyéb" }} · ${it.league.ifBlank { "Ismeretlen bajnokság" }}" }
+            .toList()
+            .sortedBy { it.first }
     }
 
     Column(
@@ -344,11 +355,52 @@ fun LiveMatchesScreen(onOpenSettings: () -> Unit) {
                 contentPadding = PaddingValues(bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(
-                    items = filteredMatches,
-                    key = { "${it.id}_${it.homeTeam}_${it.awayTeam}_${it.startTime}" }
-                ) { match ->
-                    LiveMatchCard(match = match, isLive = isUsingLive)
+                grouped.forEach { (leagueKey, matches) ->
+                    item(key = "header-$leagueKey") {
+                        val first = matches.firstOrNull()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (!first?.leagueLogo.isNullOrBlank()) {
+                                Image(
+                                    painter = rememberAsyncImagePainter(first!!.leagueLogo),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    contentScale = ContentScale.Fit
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            } else if (!first?.countryFlag.isNullOrBlank()) {
+                                Image(
+                                    painter = rememberAsyncImagePainter(first!!.countryFlag),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    contentScale = ContentScale.Fit
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(
+                                text = leagueKey,
+                                color = LiveGreen,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    items(
+                        items = matches,
+                        key = { "${it.id}_${it.homeTeam}_${it.awayTeam}" }
+                    ) { match ->
+                        LiveMatchCard(match = match, isLive = isUsingLive)
+                    }
                 }
             }
         }
@@ -387,47 +439,81 @@ private fun LiveMatchCard(
             )
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = match.homeTeam,
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                if (match.homeLogo.isNotBlank()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(match.homeLogo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentScale = ContentScale.Fit
                     )
-                    Spacer(Modifier.height(7.dp))
-                    Text(
-                        text = match.awayTeam,
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Spacer(Modifier.width(6.dp))
                 }
-                Spacer(Modifier.width(12.dp))
-                Column(horizontalAlignment = Alignment.End) {
-                    val badgeText = when {
-                        match.status == "ÉLŐ" && match.startTime.isNotBlank() -> match.startTime
-                        match.status.isNotBlank() -> match.status
-                        match.startTime.isNotBlank() -> match.startTime
-                        else -> "PROGRAM"
-                    }
-                    Text(
-                        text = badgeText,
-                        color = badgeColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                Text(
+                    text = match.homeTeam,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = match.homeScore,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (match.awayLogo.isNotBlank()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(match.awayLogo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentScale = ContentScale.Fit
                     )
-                    Spacer(Modifier.height(5.dp))
-                    Text(
-                        text = "${match.homeScore}  :  ${match.awayScore}",
-                        color = Color.White,
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Black
-                    )
+                    Spacer(Modifier.width(6.dp))
                 }
+                Text(
+                    text = match.awayTeam,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = match.awayScore,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                val badgeText = when {
+                    match.status == "ÉLŐ" && match.startTime.isNotBlank() -> match.startTime
+                    match.status.isNotBlank() -> match.status
+                    match.startTime.isNotBlank() -> match.startTime
+                    else -> "PROGRAM"
+                }
+                Text(
+                    text = badgeText,
+                    color = badgeColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
